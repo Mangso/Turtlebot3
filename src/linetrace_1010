@@ -21,17 +21,17 @@ import tf
 class line_traceee:
     def __init__(self):
         # print('init')
-        self.sub_select_ang = rospy.Subscriber('/camera2/usb_cam2/image_raw/compressed', CompressedImage,
-                                               self.line_trace, queue_size=1)
+	self.bridge = CvBridge()
+        self.sub_select_ang = rospy.Subscriber('/camera1/usb_cam1/image_raw/compressed', CompressedImage, self.line_trace, queue_size=1)
         self.sub_detect_sigh = rospy.Subscriber('/detect/traffic_sign', UInt8, self.mode_selector, queue_size=1)
         self.sub_obstacle = rospy.Subscriber('/scan', LaserScan, self.obstacle, queue_size=1)
-        self.out2 = cv2.VideoWriter('0920_2.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 30, (640, 360))
+        #self.out2 = cv2.VideoWriter('0920_2.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 30, (640, 360))
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 
         # self.trafficSign = Enum('trafficSign', 'left right dontgo construction stop parking tunnel')
 
-        self.bridge = CvBridge()
-
+        self.green_lower=np.array([50,80,80],np.uint8)
+	self.green_upper=np.array([80,220,200],np.uint8)
         ## left line
         self.left_lane = False
         self.left_pos = 0
@@ -99,8 +99,7 @@ class line_traceee:
         self.angular = 30 * np.pi / 180  # 0#35 * np.pi/180#0.0
         self.angular_temp = 0.0
 
-        self.start = False
-
+        self.start = False    
     def reset_sign(self):
         self.left_sign = False
         self.right_sign = False
@@ -374,17 +373,12 @@ class line_traceee:
         self.move(speed, angular)  # '''모든 스피트와 각도는 여기서 퍼블리싱함'''
 
     def line_trace(self, img_data):  ### left : -  ### right : +
-        rospy.on_shutdown(self.myhook)
-        try:
-            cv_image = self.bridge.compressed_imgmsg_to_cv2(img_data, "bgr8")
-        except CvBridgeError as e:
-            # print(e)
-            pass
-
-        frame = cv2.resize(cv_image, (640, 360), interpolation=cv2.INTER_AREA)
-        ROI = frame[335:355, :]
-        self.get_line(ROI)
-
+        #rospy.on_shutdown(self.myhook)
+        cv_image = self.bridge.compressed_imgmsg_to_cv2(img_data, "bgr8")
+        print(cv_image)
+        frame = cv2.resize(cv_image, (480, 640), interpolation=cv2.INTER_AREA)
+        
+        self.get_line(frame)
         if self.parking_sign:
             self.execute_parking_mode_with_camera()
 
@@ -446,6 +440,8 @@ class line_traceee:
 
     def process_img(self, frame):
         hsl = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+	global yellow_binary
+	global white_binary
         if self.parking_sign_sign:
             yellow_binary = cv2.inRange(hsl, self.HSL_YELLOW_LOWER2, self.HSL_YELLOW_UPPER2)
             white_binary = cv2.inRange(hsl, self.HSL_YELLOW_LOWER2, self.HSL_YELLOW_UPPER2)
@@ -454,6 +450,7 @@ class line_traceee:
             white_binary = cv2.inRange(hsl, self.HSL_WHITE_LOWER, self.HSL_WHITE_UPPER)
         concat_binary = cv2.hconcat([yellow_binary, white_binary])
         cv2.imshow('concat_binary', concat_binary)
+	cv2.imshow('11',hsl)
         gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gaussianB = cv2.GaussianBlur(gray_img, (5, 5), 0)
         canny = cv2.Canny(gaussianB, 50, 150)
@@ -461,7 +458,7 @@ class line_traceee:
         return canny
 
     def get_line(self, frame):
-        canny_img = process_img(frame)
+        canny_img = self.process_img(frame)
 
         cv2.imshow('canny_img', canny_img)
         lines = cv2.HoughLinesP(canny_img, 1, np.pi / 180, 10, 5, 10)
@@ -506,9 +503,9 @@ class line_traceee:
                 self.right_lane = True
                 self.right_pos = right_arr[0]
 
-            cv2.circle(frame, (int(self.center), 355), 5, (0, 0, 255), 3, -1)
-            cv2.circle(frame, (int(self.right_pos), 355), 5, (255, 0, 0), 3, -1)
-            cv2.circle(frame, (int(self.left_pos), 355), 5, (0, 255, 0), 3, -1)
+            #cv2.circle(frame, (int(self.center), 355), 5, (0, 0, 255), 3, -1)
+            #cv2.circle(frame, (int(self.right_pos), 355), 5, (255, 0, 0), 3, -1)
+            #cv2.circle(frame, (int(self.left_pos), 355), 5, (0, 255, 0), 3, -1)
 
         # if len(right_arr) > 1:
         # 	self.right_pos = np.mean(right_arr[len(right_arr)//5 : (4 * len(right_arr)//5)])

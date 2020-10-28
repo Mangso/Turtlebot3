@@ -8,6 +8,7 @@ project(foscar_turtlebot3_autorace)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  sensor_msgs
   rospy
   message_generation
   std_msgs

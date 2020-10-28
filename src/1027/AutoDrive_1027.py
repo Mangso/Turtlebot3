@@ -1,0 +1,264 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*- # 한글 주석쓰려면 이거 해야함
+
+import cv2
+import numpy as np
+import sys
+import math
+import rospy
+import time
+import os
+
+from std_msgs.msg import Float64, UInt8, String
+from sensor_msgs.msg import CompressedImage
+from geometry_msgs.msg import Twist
+from cv_bridge import CvBridge, CvBridgeError
+from sensor_msgs.msg import LaserScan
+from nav_msgs.msg import Odometry
+import tf
+
+from Light_1027 import Light
+from Line_1027 import Line
+from ObstacleDetector import Obstacle
+#from TunnelDetector import Tunnel
+from Stop_1027 import Stopbar
+
+class AutoDrive:
+    
+    def __init__(self):
+
+        self.mode = 0
+
+        self.left_lane = False
+        self.right_lane = False
+        self.center = 0
+        self.lastError = 0
+        self.MAX_VEL = 0.2
+
+        self.cam_img = np.zeros(shape=(360, 640, 3), dtype=np.uint8)
+        self.cam_img2 = np.zeros(shape=(480, 640, 3), dtype=np.uint8)
+        self.bridge = CvBridge()
+        self.go = False
+
+        # Construction
+        self.phase = 0
+        self.status = 0
+        self.check =0
+
+        # Parking
+        self.park = 0
+        self.zero = 0
+        # Stop
+        self.Chadan = 0
+        self.Chadan_go = False
+        
+
+        #
+        self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        self.mode_msg = UInt8()
+        
+        #self.line = Line('/usb_cam/image_raw/compressed')
+        self.line = Line('/camera1/usb_cam1/image_raw/compressed')
+        self.obstacle = Obstacle('/scan')
+        #self.tunnel = Tunnel('/scan')
+
+        self.sub_img1 = rospy.Subscriber('/camera1/usb_cam1/image_raw/compressed', CompressedImage,
+                                     self.callback1, queue_size=1)
+        self.sub_img2= rospy.Subscriber('/camera2/usb_cam2/image_raw/compressed', CompressedImage,
+                                     self.callback2, queue_size=1)
+        self.sub_detect_sign = rospy.Subscriber('/detect/traffic_sign', UInt8, self.mode_selector, queue_size=1)
+        
+
+    def PD_control(self, kp =0.012,kd = 0.004):
+        error = self.center - 290
+        angular_z = kp * error + kd * (error - self.lastError)
+        self.lastError = error
+        speed = min(self.MAX_VEL * ((1 - abs(error) / 320) ** 2.2), 0.15)
+        angular = -max(angular_z, -1.3) if angular_z < 0 else -min(angular_z, 1.3)
+        
+        return speed, angular
+
+    def callback1(self,img_data):
+        self.cam_img = self.bridge.compressed_imgmsg_to_cv2(img_data, "bgr8")
+
+    def callback2(self,img_data):
+        self.cam_img2 = self.bridge.compressed_imgmsg_to_cv2(img_data,"bgr8")
+
+    def mode_selector(self, mode_msg):
+        # 1 left 2 right 4 construction 5 stop 6 parking 7 tunnel
+        self.mode_msg = mode_msg.data
+    
+    def construction(self):
+        #msg = self.obstacle.msg
+        #print msg
+        speed = 0
+        angular = 0
+        if self.phase == 0:
+            # print 'Phase 1' , self.status
+            if self.status == 0:
+                speed = 0.2
+                if msg.ranges[90] < 0.3 and msg.ranges[90] != 0:
+                    self.status = 1
+                else:
+                    angular = 0
+                    
+            elif self.status == 1:
+                speed = 0.1
+                angular = 0.37
+                
+            if msg.ranges[270] < 0.4 and msg.ranges[270] != 0:
+                self.phase += 1
+                self.status = 0
+
+            self.move(speed,angular)
+                
+        elif self.phase == 1:
+            speed = 0.1
+            angular = -0.4
+
+            if msg.ranges[0] < 0.5 and msg.ranges[0] != 0:
+                self.check += 1
+
+            if self.check != 0 and msg.ranges[70] < 0.5 and msg.ranges[70] != 0:
+                self.phase += 1
+
+            self.move(speed,angular)
+                
+        elif self.phase == 2:
+            
+            speed = 0.12
+            angular = 0.36
+
+            if msg.ranges[200] < 0.5 and msg.ranges[200] != 0:
+                self.phase += 1
+
+            self.move(speed,angular)
+        
+        elif self.phase == 3:
+
+            self.mode = 3
+            # print 'Phase 4'# rospy.sleep(rospy.Duration(2))
+            print('break construction')
+            #self.mode += 1
+        print('speed, angluar : ', speed,angular)
+
+        #self.move(speed,angular)
+    #def execute_park(self):
+        
+        #speed = 0; angluar =0
+
+        #if self.parking_phase ==0:
+
+
+    def run(self):
+        rospy.on_shutdown(self.myhook)
+        img = self.cam_img
+        img2 = self.cam_img2
+
+        self.left_lane, self.right_lane, self.center = self.line.detect_lines()
+
+        msg = self.obstacle.msg
+        speed = 0
+        angular = 0
+    
+        
+        
+        if self.mode == 0 :
+            self.go = Light(img).find()
+            #self.go = True
+           # print(self.go)
+            if self.go == True :
+                self.mode += 1
+
+        # green light && Left, Rigth Sign
+        if self.mode == 1 and self.go == True:
+                
+            if self.mode_msg == 1:
+                self.center = 200
+                speed, angular = self.PD_control(kp = 0.012,kd = 0.004)
+                self.move(speed,angular)
+            elif self.mode_msg == 2:
+                self.center = 420
+                speed, angular = self.PD_control(kp = 0.012, kd = 0.004)
+            else :
+                speed, angular = self.PD_control(kp = 0.008, kd = 0.004)
+                self.move(speed,angular)
+            
+
+        #Construction
+        if self.mode == 2:
+            if self.mode_msg == 4:
+                self.construction()
+            else :
+                speed, angular = self.PD_control(kp = 0.008,kd = 0.004)
+                self.move(speed,angular)
+        '''
+        #Parking
+        if self.mode == 3 and self.mode_msg == 6:
+            #self.park = self.line.parking()
+            if self.park ==0:
+                self.move(0.1,0)
+                rospy.sleep(rospy.Duration(3))
+                self.park=1
+            if self.park ==1:
+                self.move(0,45)
+                self.park =2
+            if self.park ==2:
+                self.zero = self.line.parking()
+                if self.zero < 1500:
+                    self.move(-0.1,0)
+                    rospy.sleep(rospy.Duration(3))
+                    self.park=3
+            if self.park ==3:
+                self.move(0,0)
+
+        
+        # Stop bar
+        if self.mode == 4  and self.mode_msg == 5:
+            self.Chadan = Stopbar(img2).find()
+            if self.Chadan > 3:
+                self.move(0,0)
+                self.Chadan_go = True
+            else:
+                if self.Chadan_go ==True:
+                    self.mode = 5
+        
+            #a = self.stopbar.find
+            #print(a)
+        # Tunne
+ 
+        #if self.mode == 3:
+        '''
+            
+        
+        #print("traffic", self.go)
+        print("mode,sign ", self.mode, self.mode_msg)
+        
+        print("left : ", self.left_lane)
+        print("right: ", self.right_lane)
+        print("center : ", self.center)
+        print("speed : ",speed)
+        print("angular : ", angular)
+        #self.move(speed, angular)
+    def myhook(self):
+        twist = Twist()
+        twist.linear.x = 0
+        twist.angular.z = 0
+        
+        self.pub_cmd_vel.publish(twist)
+    
+    def move(self, speed, angular):
+        twist = Twist()
+        twist.linear.x = speed
+        twist.angular.z = angular
+
+        self.pub_cmd_vel.publish(twist)
+
+if __name__ == '__main__':
+    rospy.init_node('line_trace')
+    foscar = AutoDrive()
+    time.sleep(1)
+    rate = rospy.Rate(100)
+    while not rospy.is_shutdown():
+        foscar.run()
+        rate.sleep()
