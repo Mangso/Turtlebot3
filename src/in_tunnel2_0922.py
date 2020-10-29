@@ -58,8 +58,8 @@ Flag = 0
 check = 0
 stage = 3
 
-os.system('rosnode kill /detect_signs')
-os.system('rosnode kill /line_trace')
+#os.system('rosnode kill /detect_signs')
+#os.system('rosnode kill /line_trace')
 # os.system('rosnode kill /detect_sign')
 
 ########################################################################################################################################

@@ -18,22 +18,21 @@ import numpy as np
 import os
 
 class detect_sign:
-		def __init__(self):
-				#print('init')
-				rospy.sleep(rospy.Duration(1))
+		def __init__(self ,img):
+				self.cam_img = img
 				self.trafficSign = Enum('trafficSign', 'left right dontgo construction stop parking tunnel')
-				self.pub = rospy.Publisher('/detect/traffic_sign', UInt8, queue_size=1)
 				self.bridge = CvBridge()
+
 				self.HSL_RED_LOWER = np.array([0, 103, 80])
 				self.HSL_RED_UPPER = np.array([10, 210, 215])
 				self.HSL_RED_LOWER1 = np.array([161, 155, 84])
 				self.HSL_RED_UPPER1 = np.array([180, 210, 158])
 
-				self.HSL_YELLOW_LOWER = np.array([18, 135, 140])
-				self.HSL_YELLOW_UPPER = np.array([31, 255, 255])
+				self.HSL_YELLOW_LOWER = np.array([17, 129, 154])
+				self.HSL_YELLOW_UPPER = np.array([55, 255, 255])
 
-				self.HSL_BLUE_LOWER = np.array([90, 90, 100])
-				self.HSL_BLUE_UPPER = np.array([130, 255, 255])
+				self.HSL_BLUE_LOWER = np.array([87, 85, 100])
+				self.HSL_BLUE_UPPER = np.array([136, 255, 255])
 				
 
 				self.stop_mode = False
@@ -56,8 +55,7 @@ class detect_sign:
 
 				self.learn_images()
 				self.ready_to_detect()
-				self.sub_detect_sign = rospy.Subscriber('/camera2/usb_cam2/image_raw/compressed',CompressedImage, self.find_sign,  queue_size = 1) #get img and select angle
-				#self.sub_select_ang = rospy.Subscriber('/usb_cam/image_raw/compressed',CompressedImage, self.find_sign,  queue_size = 1)
+
 				self.bridge = CvBridge()
 
 				self.left_count = 0
@@ -69,16 +67,6 @@ class detect_sign:
 				self.tunnel_count = 0
 
 				self.is_sign = False
-		# def aa(self,img_data):
-		# 	cv_image = self.bridge.compressed_imgmsg_to_cv2(img_data, "bgr8")
-		# 	detect_area = cv_image[:, 100:540]
-		# 	hsl = cv2.inRange(detect_area, self.HSL_WHITE_LOWER, self.HSL_WHITE_UPPER)
-		# 	cntzero = cv2.countNonZero(hsl)			
-		# 	print cntzero
-		# 	while cntzero < 70000:
-				
-			# cv2.imshow('aa', hsl)
-			# cv2.waitKey(1)
 
 		def learn_images(self):
     			for imagePath in self.path_list:
@@ -101,22 +89,13 @@ class detect_sign:
 					self.labels.append(make)
 
 		def ready_to_detect(self):
-				#print("[INFO] training classifier...")
 				self.model = KNeighborsClassifier(n_neighbors=1)
 				self.model.fit(self.data, self.labels)
-				#print(self.model)
-				#print("[INFO] evaluating...")
 				
 
-		def find_sign(self, img_data):
-				img = self.bridge.compressed_imgmsg_to_cv2(img_data, "bgr8")
-				# M = np.ones(img.shape, dtype='uint8' ) * 90
-				# img = cv2.subtract(img, M)
-				roi_img = img[50:300, :640]
-				# while True:
-				#cv2.imshow("frame", img)
+		def find_sign(self):
+				roi_img = self.cam_img[0:200, :640]
 				gray = cv2.cvtColor(roi_img, cv2.COLOR_BGR2GRAY)
-				# hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 				hsl = cv2.cvtColor(roi_img, cv2.COLOR_BGR2HSV)
 				redBinary = cv2.inRange(hsl, self.HSL_RED_LOWER, self.HSL_RED_UPPER)
 				redBinary1 = cv2.inRange(hsl, self.HSL_RED_LOWER1, self.HSL_RED_UPPER1)
@@ -128,6 +107,7 @@ class detect_sign:
 				yellowBinary = cv2.inRange(hsl, self.HSL_YELLOW_LOWER, self.HSL_YELLOW_UPPER)
 				# binary = cv2.bitwise_or(binary, yellowBinary)
 				binary_yellow = cv2.bitwise_or( binary_red, yellowBinary)
+				
 				#cv2.imshow('binary_yellow', binary_yellow)
 				#cv2.imshow('binary_blue', binary_blue)
 				contours_ry, hierachy = cv2.findContours(binary_yellow, cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
@@ -170,25 +150,20 @@ class detect_sign:
 					for cnt_1 in goodContours_ry:
 						area = cv2.contourArea(cnt_1)
 						# print(area)
-						if area > 2000.0 :
+						if area > 800.0 :
 							x, y, w, h = cv2.boundingRect(cnt_1)
 							rate = float(float(h) / float(w))
 							# print w, h
-							if 60  < w < 150 and 60 < h < 150 and 0.8 < rate < 1.2:
+							if 70  < w < 100  and 70 < h < 100 and 0.8 < rate < 1.2:
 								# print rate, h, w
 								cv2.rectangle(roi_img, (x, y), (x+w, y+h), (250, 152, 50), 2)
 								inputImage = gray[y:y+h, x:x+w]
 								logo = cv2.resize(inputImage, (128, 128))
-								# print rate, "rate"
-								#cv2.imshow("logo", logo)
 								(H, hogImage) = feature.hog(logo, orientations=8, pixels_per_cell=(16, 16),
 									cells_per_block=(4, 4), transform_sqrt=True, block_norm="L2", visualise=True)
-								#cv2.imshow("hog", hogImage)
 								parking_bool = False
 								pred = self.model.predict(H.reshape(1, -1))[0]
 
-								# print(pred.title())
-								# left right dontgo construction stop parking tunnel
 								traffic_sign_msg = UInt8()
 						
 								#print(pred.title())
@@ -209,9 +184,7 @@ class detect_sign:
 										self.is_sign = True
 								elif pred.title() == 'Construction' and x > 150 :
 									self.construction_count += 1
-									#print(pred.title())
-									#print(self.construction_count)
-									if self.construction_count > 5 :
+									if self.construction_count > 0 :
 										traffic_sign_msg = self.trafficSign.construction.value
 										self.pub.publish(traffic_sign_msg)
 										rospy.loginfo('construction')
@@ -241,32 +214,27 @@ class detect_sign:
 					for cnt_2 in goodContours_b:
 						area = cv2.contourArea(cnt_2)
 						# print(area)
-						if area > 2000.0 :
+						if area > 1000.0 :
 							x, y, w, h = cv2.boundingRect(cnt_2)
 							rate = float(float(h) / float(w))
 							# print w, h
-							if 20 < w < 160 and 20 < h < 160 and 0.8 < rate < 1.2:
+							if 30 < w < 150 and 30 < h < 150 and 0.8 < rate < 1.2:
 								# print rate, h, w
 								cv2.rectangle(roi_img, (x, y), (x+w, y+h), (250, 152, 50), 2)
 								inputImage = gray[y:y+h, x:x+w]
 								logo = cv2.resize(inputImage, (128, 128))
-								# print rate, "rate"
-								#cv2.imshow("logo", logo)
 								(H, hogImage) = feature.hog(logo, orientations=8, pixels_per_cell=(16, 16),
 									cells_per_block=(4, 4), transform_sqrt=True, block_norm="L2", visualise=True)
-								#cv2.imshow("hog", hogImage)
 								parking_bool = False
 								pred = self.model.predict(H.reshape(1, -1))[0]
 
-								# print(pred.title())
-								# left right dontgo construction stop parking tunnel
 								traffic_sign_msg = UInt8()
 						
 								#print(pred.title())
 								if pred.title() == 'Left' :
 									print 'left', self.left_count
 									self.left_count += 1
-									if self.left_count > 5 :
+									if self.left_count > 1 :
 										traffic_sign_msg = self.trafficSign.left.value
 										self.pub.publish(traffic_sign_msg)
 										rospy.loginfo('left')
@@ -281,7 +249,7 @@ class detect_sign:
 										self.is_sign = True
 								elif pred.title() == 'Parking':
 									self.parking_count += 1
-									if self.parking_count > 2 :
+									if self.parking_count > 3 :
 										traffic_sign_msg = self.trafficSign.parking.value
 										# rospy.sleep(rospy.Duration(1.5))
 										self.pub.publish(traffic_sign_msg)
@@ -302,11 +270,3 @@ class detect_sign:
 									(70, 255, 0), 2)	
 				cv2.imshow("candidates", roi_img)
 				cv2.waitKey(1)
-		def main(self):
-    			rospy.spin()
-
-if __name__ == '__main__':
-    #print('main')
-    rospy.init_node('detect_signs')
-    node = detect_sign()
-    node.main()

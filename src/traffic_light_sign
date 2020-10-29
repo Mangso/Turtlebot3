@@ -14,8 +14,8 @@ class detectTrafficLight:
 		self.sub_img = rospy.Subscriber('/camera2/usb_cam2/image_raw/compressed', CompressedImage, self.callback, queue_size=1)
 		self.bridge = CvBridge()
 		#defining the Range of green color
-		self.green_lower=np.array([50,80,80],np.uint8)
-		self.green_upper=np.array([80,220,200],np.uint8)
+		self.green_lower=np.array([0,0,200],np.uint8)
+		self.green_upper=np.array([180,220,200],np.uint8)
 		
 		#defining the Range of yellow color
 

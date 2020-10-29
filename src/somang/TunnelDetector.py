@@ -16,8 +16,8 @@ class Tunnel:
         
 
         rospy.Subscriber(topic,LaserScan,self.callback)
-
-    def callback(self,data):
+		rospy.Subscriber('/odom')
+    def callback1(self,data):
         self.msg = lidar_msg
         global data2
 		global copy_data
@@ -77,6 +77,6 @@ class Tunnel:
             if copy_data[i] == data1:
                 raw.Flag = i+1	      # Publish the symbolic number of the Large value before the 'data2' array is relocated  	
                 raw.Far = data1	      # Symbolic number means the direction
-				pub.publish(raw)
-    def avg(data):
+    
+	def avg(data):
         return 	sum(data)/(len(data)-data.count(0)+0.01)

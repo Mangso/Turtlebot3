@@ -27,7 +27,7 @@ class AutoDrive:
     
     def __init__(self):
 
-        self.mode = 4
+        self.mode = 0
 
         self.left_lane = False
         self.right_lane = False
@@ -40,18 +40,25 @@ class AutoDrive:
         self.bridge = CvBridge()
         self.go = False
 
+        # three-street
+        self.right_step = 1
+
         # Construction
         self.phase = 0
         self.status = 0
         self.check =0
 
         # Parking
-        self.park = 0
-        self.park_set= 0
-        self.zero = 0
+        self.parking_phase = 1
+        self.is_left_turtlebot = False
+        self.is_right_turtlebot = False
+        self.found_turtlebot =False
+
         # Stop
         self.Chadan = 0
         self.Chadan_go = False
+
+        self.tunnel_step =3
         
 
         #
@@ -71,12 +78,13 @@ class AutoDrive:
         
 
     def PD_control(self, kp =0.012,kd = 0.004):
-        error = self.center - 300
+        error = self.center - 280
         print('error : ', error)
         angular_z = kp * error + kd * (error - self.lastError)
         self.lastError = error
         speed = min(self.MAX_VEL * ((1 - abs(error) / 320) ** 2.2), 0.2)
-        angular = -max(angular_z, -1.6 if angular_z < 0 else -min(angular_z, 1.6))
+        angular = -max(angular_z, -1.4 if angular_z < 0 else -min(angular_z,1.4))
+        
         return speed, angular
 
     def callback1(self,img_data):
@@ -143,19 +151,87 @@ class AutoDrive:
             #self.mode += 1
         print('speed, angluar : ', speed,angular)
 
+    def execute_parking_mode_with_lidar(self, msg):
+        left_range = msg.ranges[10:30]
+        right_range = msg.ranges[270:290]
+        back_range = msg.ranges[175:185]
+
+        #print(left_range)
+        #print(right_range)
+        if self.parking_phase == 1:  # both lanes are yellow
+            if self.found_turtlebot == False:  # until find parking turtlebot
+                for i in left_range:
+                    # print left_range
+                    if 0 < i < 0.6:
+                        print 'parking turlebot in left'
+                        self.is_left_turtlebot = True
+                        self.is_right_turtlebot = False
+                        self.parking_phase = 2
+                        break
+                for i in right_range:
+                    if 0 < i < 0.6:
+                        print 'parking turlebot in right'
+                        self.is_left_turtlebot = False
+                        self.is_right_turtlebot = True
+                        break
+
+        elif self.parking_phase == 2:  # '''왼쪽에잇으면 오른쪽으로 회전, 오른쪽에 잇으면 왼쪽으로 회전// 뒤통수에 터틀봇이 잡힐때까지 회전#'''
+            if self.is_left_turtlebot == True:
+                speed = 0
+                angular = math.radians(-45)
+            else:
+                speed = 0
+                angular = math.radians(45)
+
+        elif self.parking_phase == 3:  # '''3초동안 직진#'''
+            speed = 0.1
+            angular = 0
+            self.move(speed, angular)
+            rospy.sleep(rospy.Duration(3))
+            self.parking_phase += 1
+
+        elif self.parking_phase == 4:  # '''뒤 돈다#'''
+            speed = 0
+            if self.is_left_turtlebot == True:
+                angular = math.radians(-90)
+                self.move(speed, angular)
+                rospy.sleep(rospy.Duration(2))  # '''2초동안#'''
+                self.parking_phase += 1
+
+            else:
+                angular = math.radians(90)
+                self.move(speed, angular)
+                rospy.sleep(rospy.Duration(2))
+                self.parking_phase += 1
+
+            speed = 0
+            angular = 0
+            self.move(speed, angular)
+            rospy.sleep(rospy.Duration(0.1))  # '''이거는 주차하고 속도가 0인 순간이 필요해서 넣은 슬립 함수#'''
+
+        elif self.parking_phase == 5:  # '''여기서 탈출 한다 2.8초동안 하드 코딩함#'''
+            speed = 0.2
+            if self.is_left_turtlebot == True:
+                angular = math.radians(55)
+            else:
+                angular = math.radians(-55)
+            self.move(speed, angular)
+            rospy.sleep(rospy.Duration(2.8))
+            self.mode = 6
 
     def run(self):
+
         rospy.on_shutdown(self.myhook)
         img = self.cam_img
         img2 = self.cam_img2
 
         self.left_lane, self.right_lane, self.center = self.line.detect_lines()
-
         msg = self.obstacle.msg
         speed = 0
         angular = 0
-        self.mode_msg =5
-
+        #self.mode_msg =6
+        #print(msg)
+        
         if self.mode == 0 :
             #self.go = Light(img).find()
             self.go = True
@@ -167,88 +243,82 @@ class AutoDrive:
         if self.mode == 1 and self.go == True:
                 
             if self.mode_msg == 1:
-                self.center = 200
+               # self.center = 200
                 speed, angular = self.PD_control(kp = 0.012,kd = 0.004)
                 self.move(speed,angular)
             elif self.mode_msg == 2:
-                self.center = 420
-                speed, angular = self.PD_control(kp = 0.012,kd = 0.004)
-                self.move(speed,angular)
-            
+                if self.right_step == 1:
+                    self.move(0,0)
+                    rospy.sleep(rospy.Duration(1.5))
+                    self.move(0,-0.37)
+                    rospy.sleep(rospy.Duration(3))
+                    self.right_step =2
+                elif self.right_step == 2:
+                    speed, angular = self.PD_control(kp = 0.012,kd = 0.004)
+                    self.move(speed,angular)
+                    if self.mode_msg == 4:
+                        self.mode = 2
             else :
                 speed, angular = self.PD_control(kp = 0.008,kd = 0.004)
                 self.move(speed,angular)
                 if self.mode_msg ==4:
-                    self.mode=2
+                    self.mode= 2
 
         #Construction
         if self.mode == 2 and self.mode_msg == 4:
             self.construction()
         
-        if self.mode == 3 and self.mode_msg == 6:
-            self.park_set = self.line.parking_set()
-            
-            if self.park ==0 and self.park_set == 1:
-                self.move(0.1,0)
-                rospy.sleep(rospy.Duration(5))
-                self.move(0,45)
-                rospy.sleep(rospy.Duration(1))
-                self.move(0,0)
-                rospy.sleep(rospy.Duration(2))
-                self.zero = self.line.parking()
-                self.park =3
-            if self.park ==3:
-                if self.zero < 100:
-                    self.move(-0.1,0)
-                    rospy.sleep(rospy.Duration(3))
-                    self.park=4
-                else :
-                    self.move(0.1,0)
-                    rospy.sleep(rospy.Duration(3))
-                    self.park=4
-            if self.park ==4:
-                self.move(0,0)
-                rospy.sleep(rospy.Duration(3))
+        # parking 
+        if self.mode == 3:
+            if self.mode_msg ==6 :
+                self.execute_parking_mode_with_lidar(msg)
             else:
                 speed, angular = self.PD_control(kp = 0.008,kd = 0.004)
                 self.move(speed,angular)
-            
-                
 
-        
         # Stop bar
-        if self.mode == 4  and self.mode_msg == 5:
+        if self.mode == 5 :
             self.Chadan = Stopbar(img2).find()
             #print(self.Chadan)
             if self.Chadan > 1:
                 self.move(0,0)
                 self.Chadan_go = True
             elif self.Chadan == 0 and self.Chadan_go == True:
-                self.mode =5
+                self.mode =6
                 
             else:
                 speed, angular = self.PD_control(kp = 0.008,kd = 0.004)
                 self.move(speed,angular)
-        if self.mode == 5:
+        if self.mode == 6:
             speed, angular = self.PD_control(kp = 0.008,kd = 0.004)
             self.move(speed,angular)
-            print(3333)
             #a = self.stopbar.find
             #print(a)
-        # Tunne
- 
-        #if self.mode == 3:
+
+        # Tunnel
+        '''
+        if self.mode == 6 and self.mode_msg == 7:
+            if 0.05 < msg.ranges[290] <0.3:
+                if self.tunnel_step == 3:
+                    os.system('roslaunch foscar_turtlebot3_autorace tunnel.launch')
+                    os.system('rosnode kill /detect_signs')
+                    os.system('rosnode kill /line_trace')
+                    self.tunnel_step = 4
+            
+            speed, angular = self.PD_control(kp = 0.008,kd = 0.004)
+            self.move(speed,angular)
+        '''
+
         
             
         
         #print("traffic", self.go)
-        print("mode,sign ", self.mode, self.mode_msg)
-        
+        # print("mode,sign ", self.mode, self.mode_msg)
         print("left : ", self.left_lane)
         print("right: ", self.right_lane)
         print("center : ", self.center)
         #print("speed : ",speed)
-        print("angular : ", angular)
+        # print("angular : ", angular)
         #self.move(speed, angular)
     def myhook(self):
         twist = Twist()

@@ -95,10 +95,10 @@ class Line:
             center = (left_pos + right_pos) // 2
 
         elif left_lane == True and right_lane == False:
-            center = left_pos + 330
+            center = left_pos + 300
 
         elif left_lane == False and right_lane == True:
-            center = right_pos - 330
+            center = right_pos - 300
 
         else:
             pass
@@ -108,45 +108,3 @@ class Line:
         #cv2.imshow("canny " ,canny_img)
         #cv2.waitKey(1)
         return left_lane, right_lane, center
-
-    def parking(self):
-        frame = self.cam_img
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        white = cv2.inRange(hsv, self.HSV_WHITE_LOWER, self.HSV_WHITE_UPPER)
-        
-        #left_area =white[: ,0: 320]
-        #right_area = white[: , 320: 640]
-        area = white[50:200,250:450]
-        zero = cv2.countNonZero(area)
-        #leftzero = cv2.countNonZero(left_area)
-        #rightzero = cv2.countNonZero(right_area)
-
-        #cv2.imshow('left',area)
-        #cv2.imshow('right', right_area)
-        #cv2.waitKey(1)
-        
-        return zero
-    def parking_set(self):
-        frame = self.cam_img
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        white = cv2.inRange(hsv, self.HSV_WHITE_LOWER, self.HSV_WHITE_UPPER)
-        #area = white[:,200:400]
-        
-        left_area =white[50:150: ,0: 100]
-        right_area = white[50:150 , 540: 640]
-        #area = white[50:200,250:450]
-        #zero = cv2.countNonZero(area)
-        leftzero = cv2.countNonZero(left_area)
-        rightzero = cv2.countNonZero(right_area)
-
-        #cv2.imshow('left',left_area)
-        #cv2.imshow('right', right_area)
-        #cv2.waitKey(1)
-        if leftzero < rightzero:
-            return 1
-        else :
-            return 2
-
-

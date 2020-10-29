@@ -24,9 +24,9 @@ class line_traceee:
 	self.bridge = CvBridge()
         self.sub_select_ang = rospy.Subscriber('/camera1/usb_cam1/image_raw/compressed', CompressedImage, self.line_trace, queue_size=1)
         #self.sub_traffic_light = rospy.Subscriber('camera2/usb_cam2/image_raw/compreesd',CompressedImage,self.traffic_light,queue_size=1)
-        #self.sub_detect_sigh = rospy.Subscriber('/detect/traffic_sign', UInt8, self.mode_selector, queue_size=1)
-        #self.sub_obstacle = rospy.Subscriber('/scan', LaserScan, self.obstacle, queue_size=1)
-        #self.out2 = cv2.VideoWriter('0920_2.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 30, (640, 360))
+        self.sub_detect_sigh = rospy.Subscriber('/detect/traffic_sign', UInt8, self.mode_selector, queue_size=1)
+        self.sub_obstacle = rospy.Subscriber('/scan', LaserScan, self.obstacle, queue_size=1)
+        self.out2 = cv2.VideoWriter('0920_2.avi', cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 30, (640, 360))
         self.pub_cmd_vel = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 
         # self.trafficSign = Enum('trafficSign', 'left right dontgo construction stop parking tunnel'
@@ -84,14 +84,14 @@ class line_traceee:
         self.parkingchk = False
 
         # for detect lane
-        self.HSL_YELLOW_LOWER = np.array([10, 5, 160])
-        self.HSL_YELLOW_UPPER = np.array([40, 255, 255])
+        self.HSL_YELLOW_LOWER = np.array([0, 35, 0])
+        self.HSL_YELLOW_UPPER = np.array([60, 255, 255])
 
-        self.HSL_YELLOW_LOWER2 = np.array([24, 17, 140])
-        self.HSL_YELLOW_UPPER2 = np.array([38, 255, 255])
+        self.HSL_YELLOW_LOWER2 = np.array([0, 35, 0])
+        self.HSL_YELLOW_UPPER2 = np.array([60, 255, 255])
 
-        self.HSL_WHITE_LOWER = np.array([0, 0, 200])
-        self.HSL_WHITE_UPPER = np.array([180, 255, 255])
+        self.HSL_WHITE_LOWER = np.array([80, 30, 95])
+        self.HSL_WHITE_UPPER = np.array([180, 145, 255])
 
         self.speed = 0.1
         self.angular = 30 * np.pi / 180  # 0#35 * np.pi/180#0.0
@@ -379,7 +379,7 @@ class line_traceee:
         #frame = cv2.resize(cv_image, (720, 1280), interpolation=cv2.INTER_AREA)
         #frame = cv2.resize
         
-        roi = cv_image[180:200, : ]
+        roi = cv_image[270:300, : 600 ]
         self.get_line(roi)
         
         #self.get_line(cv_image)
@@ -414,7 +414,7 @@ class line_traceee:
                 self.angular = 0
             elif self.left_lane == False and self.right_lane == False:
                 angular = self.angular
-                speed = 0.12
+                speed = 0.06
             else:
                 if self.left_lane == True and self.right_lane == True:
                     self.center = (self.left_pos + self.right_pos) // 2
@@ -430,7 +430,7 @@ class line_traceee:
                         self.center = 200
                     else:
                         # print 'elseeeeeeeeeeee'
-                        self.center = self.right_pos - 240  # 616
+                        self.center = self.right_pos - 289  # 616
                 else:
                     pass
 
@@ -457,7 +457,7 @@ class line_traceee:
         concat_binary = cv2.hconcat([yellow_binary, white_binary])
         #cv2.imshow('concat_binary', concat_binary)
         #cv2.imshow('white',white_binary)
-	    #cv2.imshow('11',hsl)
+        #cv2.imshow('11',hsl)
         #cv2.waitKey(1)
         gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gaussianB = cv2.GaussianBlur(gray_img, (5, 5), 0)
@@ -511,9 +511,9 @@ class line_traceee:
                 self.right_pos = right_arr[0]
 
             
-           # cv2.circle(frame, (int(self.center),20 ), 5, (0, 0, 255), 3, -1)
-           # cv2.circle(frame, (int(self.right_pos),20 ), 5, (255, 0, 0), 3, -1)
-           # cv2.circle(frame, (int(self.left_pos),20 ), 5, (0, 255, 0), 3, -1)
+        #cv2.circle(frame, (int(self.center),20 ), 5, (0, 0, 255), 3, -1)
+        #cv2.circle(frame, (int(self.right_pos),20 ), 5, (255, 0, 0), 3, -1)
+        #cv2.circle(frame, (int(self.left_pos),20 ), 5, (0, 255, 0), 3, -1)
             
         #cv2.imshow('frame',frame)
         #cv2.waitKey(1)
