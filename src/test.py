@@ -378,10 +378,10 @@ class line_traceee:
         #print(cv_image)
         #frame = cv2.resize(cv_image, (720, 1280), interpolation=cv2.INTER_AREA)
         #frame = cv2.resize
-        
+
         roi = cv_image[270:300, : 600 ]
         self.get_line(roi)
-        
+
         #self.get_line(cv_image)
 
         if self.parking_sign:
@@ -510,11 +510,11 @@ class line_traceee:
                 self.right_lane = True
                 self.right_pos = right_arr[0]
 
-            
+
         #cv2.circle(frame, (int(self.center),20 ), 5, (0, 0, 255), 3, -1)
         #cv2.circle(frame, (int(self.right_pos),20 ), 5, (255, 0, 0), 3, -1)
         #cv2.circle(frame, (int(self.left_pos),20 ), 5, (0, 255, 0), 3, -1)
-            
+
         #cv2.imshow('frame',frame)
         #cv2.waitKey(1)
 
@@ -537,6 +537,3 @@ if __name__ == '__main__':
     rospy.init_node('line_trace')  # , anonymous=True)
     node = line_traceee()
     node.main()
-
-
-

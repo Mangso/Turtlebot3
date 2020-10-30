@@ -261,8 +261,8 @@ class line_traceee:
         elif self.construction_sign:
             self.execute_construction_mode(msg)
 
-        elif self.parking_sign:
-            self.execute_parking_mode_with_lidar(msg)
+        #elif self.parking_sign:
+            #self.execute_parking_mode_with_lidar(msg)
 
         self.check_tunnel(msg)
 
@@ -282,107 +282,83 @@ class line_traceee:
 
         return speed, angular
 
-    def execute_parking_mode_with_camera(self):
+    def execute_parking_mode_with_camera(self,img):
+        frame = img[50:150 , 200:300 ]
+        centerframe = img[0 : 100 ,]
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        white = cv2.inRange(hsv, self.HSV_WHITE_LOWER, self.HSV_WHITE_UPPER)
+        zero = cv2.countNonZero(frame)
+
         if self.parking_phase == 0:  # until both lanes are yellow
             # print(self.left_lane, self.right_lane)
-            if self.left_lane == True and self.right_lane == False:
-                self.center = self.left_pos + 273
-            elif self.left_lane == False:  # and self.right_lane == False:
-                self.center = 210
-            elif self.right_lane == True and self.right_lane == True:
-                self.parking_phase += 1
+            if 100 <zero < 500:
+                self.move(0,0)
+                rospy.sleep(rospy.Duration(1.5))
+                self.parking_phase = 1
+
             else:
-                pass
+                speed, angular = self.PD_control(kp=0.012,kd =0.004)
+                self.move(speed,angular)
 
-            speed, angular = self.PD_control(kp=0.012, kd=0.004)
+        elif self.parking_phase == 1:
+            self.move(0.15, 0)
+            rospy.sleep(rospy.Duration(3))
+            self.parking_phase = 2
 
-        elif self.parking_phase == 1:  # '''1단계는 양쪽 라인 다 잇는경우임'''
-            if self.left_lane == True and self.right_lane == True:
-                self.center = (self.left_pos + self.right_pos) // 2
-
-            elif self.left_lane == True and self.right_lane == False:
-                self.center = self.left_pos + 287
-
-            elif self.left_lane == False and self.right_lane == True:
-                self.center = self.right_pos - 289
-            elif self.left_lane == False and self.right_lane == False:  # '''양쪽라인 다 노랑색이 아닌경우 직진함#'''
-                self.center = 327
-            else:
-                pass
-
-            speed, angular = self.PD_control(kp=0.012, kd=0.004)
-
-            if self.is_left_turtlebot == True:  # '''1단계에서 터틀봇이 왼쪽 혹은 오릉쪽에 잇으면 2단계로 넘어감#'''
-                self.found_turtlebot = True
-                self.parking_phase += 1
-            elif self.is_right_turtlebot == True:
-                self.parking_phase += 1
-                self.found_turtlebot = True
-        elif self.parking_phase == 2:  # '''왼쪽에잇으면 오른쪽으로 회전, 오른쪽에 잇으면 왼쪽으로 회전// 뒤통수에 터틀봇이 잡힐때까지 회전#'''
-            if self.is_left_turtlebot == True:
-                speed = 0
-                angular = math.radians(-45)
-            else:
-                speed = 0
-                angular = math.radians(45)
-
-        elif self.parking_phase == 3:  # '''3초동안 직진#'''
+        elif self.parking_phase == 2:  # '''3초동안 직진#'''
             speed = 0.1
             angular = 0
             self.move(speed, angular)
             rospy.sleep(rospy.Duration(3))
-            self.parking_phase += 1
+            self.parking_phase = 3
 
-        elif self.parking_phase == 4:  # '''뒤 돈다#'''
-            speed = 0
-            if self.is_left_turtlebot == True:
-                angular = math.radians(-90)
-                self.move(speed, angular)
-                rospy.sleep(rospy.Duration(2))  # '''2초동안#'''
-                self.parking_phase += 1
+        elif self.parking_phase == 3:
+            self.move(0,0)
+            rospy.sleep(rospy.Duration(0.1))
+            self.parking_phase = 4
 
+        elif self.parking_phase == 4:  # '''여기서 탈출 한다 2.8초동안 하드 코딩함#'''
+            self.move(0,math.radians(-90))
+            rospy.sleep(rospy.Duration(2))
+            self.parking_phase = 5
+
+        elif self.parking_phase == 5:
+            centerzero = cv2.countNonZero(frame)
+            if centerzero > 400:
+                self.move(-0.2,0)
+                rospy.sleep(rospy.Duration(1))
+                self.parking_phase = 6
             else:
-                angular = math.radians(90)
-                self.move(speed, angular)
-                rospy.sleep(rospy.Duration(2))
-                self.parking_phase += 1
+                self.move(0,math.radians(-180))
+                rospy.sleep(rospy.Duration(0.2))
+                self.parking_phase = 7
 
-            speed = 0
-            angular = 0
-            self.move(speed, angular)
-            rospy.sleep(rospy.Duration(0.1))  # '''이거는 주차하고 속도가 0인 순간이 필요해서 넣은 슬립 함수#'''
+        elif self.parking_phase == 6:
+            self.move(0.2,math.radinas(-55))
+            rospy.sleep(rospy.Duration(-2.8))
+            self.parkign_phase = 10
 
-        elif self.parking_phase == 5:  # '''여기서 탈출 한다 2.8초동안 하드 코딩함#'''
-            speed = 0.2
-            if self.is_left_turtlebot == True:
-                angular = math.radians(55)
-            else:
-                angular = math.radians(-55)
-            self.move(speed, angular)
+        elif self.parking_phase == 7:
+            self.move(-0.2,0)
+            rospy.sleep(rospy.Duration(1))
+            self.parking_phase = 8
+
+        elif self.parking_phase == 8:
+            self.move(0.2,math.radians(55))
             rospy.sleep(rospy.Duration(2.8))
-            self.parking_phase += 1
+            self.parking_phase = 10
 
-        elif self.parking_phase == 6:  # '''여기서부터 양쪽 다 노랑색인 구간////// 여기 알고리즘 수정해서 그냥 self.left_sign True로 만들어 주면 될듯 주석달때 보니까 알고리즘 여기 엉망이네#'''
-            speed = 0.12
-            angular = 0
-            self.mode = False
-            self.parking_sign = False
+        elif self.parking_phase == 10:
+            self.is_parking_sign == False
 
-        # print self.parking_phase
 
-        self.move(speed, angular)  # '''모든 스피트와 각도는 여기서 퍼블리싱함'''
 
     def line_trace(self, img_data):  ### left : -  ### right : +
         rospy.on_shutdown(self.myhook)
         cv_image = self.bridge.compressed_imgmsg_to_cv2(img_data, "bgr8")
-        #print(cv_image)
-        #frame = cv2.resize(cv_image, (720, 1280), interpolation=cv2.INTER_AREA)
-        #frame = cv2.resize
-        
+
         roi = cv_image[270:300, : 600 ]
         self.get_line(roi)
-        
-        #self.get_line(cv_image)
 
         if self.parking_sign:
             self.execute_parking_mode_with_camera()
@@ -393,12 +369,11 @@ class line_traceee:
         elif self.tunnel_sign:
             return
 
-        else:  # default line trace
-            #print'line tracing'
-            #print 'left line : ',self.left_lane
-            #print 'right line : ', self.right_lane
-            #print self.left_lane, self.right_lane
-            # center = self.center
+        elif self.stop_sign:
+            return
+
+
+        else:
             if self.is_stop and self.stopchk == False: # stop
                 angular = 0
                 speed = 0
@@ -448,13 +423,11 @@ class line_traceee:
         global yellow_binary
         global white_binary
         #print self.parking_sign_sign
-        if self.parking_sign_sign:
-            yellow_binary = cv2.inRange(hsl, self.HSL_YELLOW_LOWER2, self.HSL_YELLOW_UPPER2)
-            white_binary = cv2.inRange(hsl, self.HSL_YELLOW_LOWER2, self.HSL_YELLOW_UPPER2)
-        else:
-            yellow_binary = cv2.inRange(hsl, self.HSL_YELLOW_LOWER, self.HSL_YELLOW_UPPER)
-            white_binary = cv2.inRange(hsl, self.HSL_WHITE_LOWER, self.HSL_WHITE_UPPER)
-        concat_binary = cv2.hconcat([yellow_binary, white_binary])
+
+        yellow_binary = cv2.inRange(hsl, self.HSL_YELLOW_LOWER, self.HSL_YELLOW_UPPER)
+        white_binary = cv2.inRange(hsl, self.HSL_WHITE_LOWER, self.HSL_WHITE_UPPER)
+
+        #concat_binary = cv2.hconcat([yellow_binary, white_binary])
         #cv2.imshow('concat_binary', concat_binary)
         #cv2.imshow('white',white_binary)
         #cv2.imshow('11',hsl)
@@ -510,11 +483,11 @@ class line_traceee:
                 self.right_lane = True
                 self.right_pos = right_arr[0]
 
-            
+
         #cv2.circle(frame, (int(self.center),20 ), 5, (0, 0, 255), 3, -1)
         #cv2.circle(frame, (int(self.right_pos),20 ), 5, (255, 0, 0), 3, -1)
         #cv2.circle(frame, (int(self.left_pos),20 ), 5, (0, 255, 0), 3, -1)
-            
+
         #cv2.imshow('frame',frame)
         #cv2.waitKey(1)
 
@@ -537,6 +510,3 @@ if __name__ == '__main__':
     rospy.init_node('line_trace')  # , anonymous=True)
     node = line_traceee()
     node.main()
-
-
-
